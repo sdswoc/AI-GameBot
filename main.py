@@ -5,25 +5,161 @@ from pygame import mixer
 from random import randint
 import os
 
-# Initializing pygame and mixer
+
 pygame.init()
 mixer.init()
 
-# Constants
-TEXT_FONT = pygame.font.Font('fonts/agency_fb.ttf', 50)
-HOME_X = 400
-HOME_Y = 300
+global PLAYER_THIRDWAY, floor_y, floor_yy, floor_group, bottom_floor
+TEXT_FONT = pygame.font.Font('fonts/agency_fb.ttf', 25)
+# HOME_X = 400
+# HOME_Y = 300
+PLAYER_VEL = 5
+OFFSET_Y = 50
+scroll = 0
 PLAYER_X = 208/6.5
 PLAYER_Y = 411/6.5
-PLAYER_GRAVITY = 0
-WIN_WIDTH = 800
+WIN_WIDTH = 800  
 WIN_HEIGHT = 600
 GAME_ACTIVE = True
-MAX_FLOORS = 200
-PLAYER_THIRDWAY = False
+MAX_FLOORS = 50
+PLAYER_THIRDWAY= False
 PLAYER_2THIRDWAY = False
 FLOOR_VELOCITY = 0
-FLOOR_TIMER = 0
+
+floor_indices = []
+START_TIME = 0
+floor_y = WIN_HEIGHT-150
+floor_yy = WIN_HEIGHT -150
+floor_group = list()
+removed_floor = 0
+music_dict =  {
+    "gameBG" : os.path.join("music","gameBG.mp3"),
+    "theme" : os.path.join("music","theme.mp3"),
+    "gameover" : os.path.join("music","gameover.ogg"),
+    "menuchoose" : os.path.join("music","menuchoose.ogg"),
+    "menuchange" : os.path.join("music","menuchange.ogg"),
+    "tryagain" : os.path.join("music","tryagain.ogg"),
+    "hurryup" : os.path.join("music","hurryup.ogg"),
+}
+
+
+
+def reset():
+    global floor_y,floor_yy, FLOOR_VELOCITY, floor_indices, floor_group, START_TIME, PLAYER_THIRDWAY, GAME_ACTIVE
+    START_TIME = pygame.time.get_ticks()//1000
+    player.score = 0
+    PLAYER_THIRDWAY = False
+    player.current_floor = WIN_HEIGHT - floor_surf.get_height() - PLAYER_Y
+    floor_indices = list()
+    floor_group = []
+    floor_y = WIN_HEIGHT-150
+    floor_yy = WIN_HEIGHT -150
+    FLOOR_VELOCITY = 0
+    player.rect.x = WIN_WIDTH//2
+    player.rect.y = WIN_HEIGHT - floor_surf.get_height() - PLAYER_Y
+    player.y_vel = 0
+    player.jump_count = 0
+    player.current_floor_index = 0
+    player.highest_floor_index = 0
+    player.old_floor_index = 0
+
+    bottom_floor = Floor(0,WIN_HEIGHT-50,WIN_WIDTH)
+    floor_group.append(bottom_floor)
+    for i in range(MAX_FLOORS):
+        f_w = randint(120,400)
+        f_x = randint(30,WIN_WIDTH-f_w-30) 
+    
+        floor = Floor(f_x, floor_yy, f_w)
+        floor_group.append(floor)
+
+        floor_yy -= 100
+    GAME_ACTIVE = menu["PlayGame"]
+
+class Player(pygame.sprite.Sprite):
+    # we can use sprites collide method
+    COLOR = (255,0,0)
+    GRAVITY = 1 # Setting default gravity
+    def __init__(self,x,y):
+        super().__init__()
+        self.image = pygame.image.load('sprites/icyMan.png')
+        self.image = pygame.transform.scale(self.image, (PLAYER_X, PLAYER_Y))
+        self.rect = pygame.Rect(x,y,PLAYER_X,PLAYER_Y)
+        self.x_vel = 0  
+        self.y_vel = 0
+        self.mask = None
+        self.fall_count = 0
+        self.jump_count = 0
+        self.score = 0
+        self.current_floor = 0
+        self.highest_floor = 0
+        self.old_floor = 0
+        self.current_floor_index = 0
+        self.old_floor_index = 0
+        self.highest_floor_index = 0
+        self.on_floor = True
+        self.collision = True
+        # self.jump = False
+        self.combo = False
+        self.comboadded = True
+        self.bonus_y = 0 
+        self.current_height = self.rect.y
+        self.current_y = self.rect.y
+
+    def jump(self):
+        self.jump_count+=1
+        self.on_floor = False
+        
+        self.current_height = self.rect.y
+        if self.jump_count == 1:
+            self.y_vel = -self.GRAVITY * 15 - self.bonus_y
+            
+            self.count = 0
+        # elif self.jump_count == 2 : 
+
+
+
+    def move(self,dx,dy):
+        """
+        Function will move the player
+        dx = change in x
+        dy = change in y
+        """
+        self.rect.x += dx
+        self.rect.y += dy 
+        
+    def move_left(self, vel):
+        self.x_vel = -vel
+    def move_right(self, vel):
+        self.x_vel = vel
+    def loop(self,fps):
+        """loop to move player and control animation """
+        # Trying to get more realistic gravity
+        # self.y_vel += min(1,(self.fall_count/fps)*self.GRAVITY)
+        self.y_vel += self.GRAVITY
+        self.move(self.x_vel, self.y_vel)
+
+        self.fall_count += 1 
+        # self.update_sprite()
+        self.update()
+    
+    def landed(self):
+        self.on_floor = True
+        self.jump_count = 0
+        self.fall_count = 0
+        self.y_vel = 0
+        self.old_floor = self.current_floor
+        # self.score += 10
+
+    def update(self):
+        self.rect = self.image.get_rect(topleft = (self.rect.x, self.rect.y))
+        self.mask = pygame.mask.from_surface(self.image)
+
+    def draw(self,window, offset_x=0):
+        window.blit(self.image, (self.rect.x - offset_x, self.rect.y))
+    def get_score(self):
+        return self.score
+    def update_score(self):
+        self.score+=10
 
 
 class Floor(pygame.sprite.Sprite):
@@ -40,100 +176,53 @@ class Floor(pygame.sprite.Sprite):
         return self.width
     def get_x(self) : return self.x
     def get_y(self) : return self.y
+    def scroll(self, scroll):
+        self.rect.y += scroll
+        self.rectsolid.y += scroll
+
+
+class Wall(pygame.sprite.Sprite):
+    def __init__(self,x,y,dire):
+        super().__init__()
+        self.x = x
+        self.y = y
+        self.dire = dire
+        self.image = pygame.transform.rotozoom(pygame.image.load('sprites/wall2.png').convert_alpha(),0,0.4)
+        self.rect = self.image.get_rect(topright = (self.x, self.y))
+        if self.dire == "left" :
+            self.image = pygame.transform.flip(self.image, True, False)
+        
+    def draw(self,screen):
+        screen.blit(self.image,self.rect)
+
+
 
 def place_surface (surf,rect):
     screen.blit(surf,rect)
 
 
-# Function to draw floor starting from start x location to end x location
-def draw_floor(floor,rect,st,en):
-    rect.x = st
-    while rect.x<en:
-        if PLAYER_THIRDWAY:
-            rect.top += FLOOR_VELOCITY
-        screen.blit(floor, rect)
-        rect.x += floor.get_width()
-def floor_sprite(floor_group):
+
+# def construct_floor(floor,rect,st,en):
+#     rect.x = st
+#     while rect.x<en:
+#         if PLAYER_THIRDWAY:
+#             rect.top += FLOOR_VELOCITY
+#         screen.blit(floor, rect)
+#         rect.x += floor.get_width()
+def draw_floor(floor_group):
     for floor in floor_group:
         floor.rect.x = floor.get_x()
+        # floor.rect.y = floor.get_y() 
+        floor.rect.y += FLOOR_VELOCITY
+        floor.rectsolid.y += FLOOR_VELOCITY
         while floor.rect.x < (floor.get_x() + floor.get_width()):
             screen.blit(floor.image, floor.rect)
             floor.rect.x += floor_surf.get_width()
 
 
-# Creating display surface
-screen = pygame.display.set_mode((WIN_WIDTH,WIN_HEIGHT)) 
-screen.fill('White')
-
-
-# Setting a title caption to our pygame window
-pygame.display.set_caption("Icy Tower")
-
-
-# Setting up icon 
-game_icon = pygame.image.load("icons\icytowericon.png")
-pygame.display.set_icon(game_icon)
-
-
-# Creating clock object for time and framerate setup
-clock = pygame.time.Clock()
-
-
-# Setting up background image
-background_surf = pygame.image.load('sprites/background.jpg').convert()
-
-
-# setting up walls
-RWall_surf = pygame.transform.rotozoom(pygame.image.load('sprites/wall2.png').convert_alpha(),0,0.4)
-LWall_surf = pygame.transform.flip(RWall_surf,True, False)
-wallList = []
-wallList.append(RWall_surf.get_rect(topright = (804,0)))
-wallList.append(RWall_surf.get_rect(topright = (804,240)))
-wallList.append(RWall_surf.get_rect(topright = (804,480)))
-wallList.append(LWall_surf.get_rect(topright = (LWall_surf.get_width()-4,0)))
-wallList.append(LWall_surf.get_rect(topright = (LWall_surf.get_width()-4,240)))
-wallList.append(LWall_surf.get_rect(topright = (LWall_surf.get_width()-4,480)))
-
-
-# Setting up floor
-floor_surf = pygame.image.load('sprites/icy2.png').convert()                 
-floor_rect = floor_surf.get_rect(topleft = (0,WIN_HEIGHT-floor_surf.get_height()))
-floor_y = WIN_HEIGHT-150
-floor_yy = WIN_HEIGHT -150
-floor_group = pygame.sprite.Group()
-
-for floor in range(MAX_FLOORS):
-    f_w = randint(120,400)
-    f_x = randint(30,WIN_WIDTH-f_w-30) 
-    # print(f_x, floor_yy, f_w)
-    floor = Floor(f_x, floor_yy, f_w)
-    floor_group.add(floor)
-    floor_yy -= 100
-
-floor_rect_list = []
-
-# print(screen.get_width())
-# floor timer
-# FLOOR_TIMER = pygame.USEREVENT + 1
-# pygame.time.set_timer(FLOOR_TIMER, 1)
-
-# setting up player
-player_surf = pygame.image.load('sprites/icyMan.png')
-player_surf = pygame.transform.scale(player_surf, (PLAYER_X, PLAYER_Y))
-player_rect = player_surf.get_rect(midbottom = (100,WIN_HEIGHT-floor_surf.get_height()))
-
-
-# Background music
-mixer.Channel(0).play(mixer.Sound('music/gameBG.mp3'), loops= 100)
-# mixer.Channel(1).play(mixer.Sound('music/theme.mp3'), loops= 100)
-mixer.Channel(0).set_volume(0.01)
-# mixer.Channel(1).set_volume(0)
-
-jump_counter = 0
-
 def welcome(screen):
-    # WIN_HEIGHT= 900
-    # WIN_WIDTH = 700
+    
+    
     SCREEN = screen
     pygame.display.set_caption("IcyTower")
     tilt = 0 
@@ -214,164 +303,256 @@ def welcome(screen):
         pygame.display.update()
         clock.tick(60)
         
+def handle_move(player,objects):
+    keys = pygame.key.get_pressed()
+
+
+    player.x_vel = 0 # If we don't do it player will continue to move untill we press some other key
+    collide_left = collide(player, objects, -PLAYER_VEL)
+    collide_right = collide(player, objects, PLAYER_VEL)
+    if keys[pygame.K_LEFT] and not collide_left:
+        player.move_left(PLAYER_VEL)
+    if keys[pygame.K_RIGHT] and not collide_right:
+        player.move_right(PLAYER_VEL)
+    
+    # handle_vertical_collition(player, objects, player.y_vel)
+
+
+# Handling horizontal collision
+def collide(player, objects, dx):
+    player.move(dx, 0)
+    player.update()
+    collided_object = None
+    for obj in objects:
+        if pygame.sprite.collide_mask(player, obj):
+            collided_object = obj
+            break
+    player.move(-dx, 0)
+    player.update()
+    return collided_object
+def print_text(text,font,screen,pos, color = (202, 241, 222)):
+    text_surface = font.render(text,True, color)
+    text_rect = text_surface.get_rect(center = pos)
+    screen.blit(text_surface,text_rect)
+
+def draw(bg, floor_grp,wallgrp,player):
+    global FLOOR_VELOCITY
+    global PLAYER_THIRDWAY 
+    global removed_floor
+    global scroll
+
+    # construct_floor(flr,floor_rect,0,WIN_WIDTH)
+    if player.rect.top <= OFFSET_Y:
+            if player.y_vel < 0:
+                # player.y_vel = 0
+                player.rect.top = OFFSET_Y
+                scroll = -player.y_vel
+                # player.move(0,scroll)
+            else: 
+                scroll = 0
+    for floor in floor_grp:
+        # print(floor_indices)
+        floor.scroll(scroll)
+        if floor.rect.bottom > WIN_HEIGHT + 200:
+            # print("Me izz here")
+            # removed_floor += 1
+            floor_group.remove(floor)
+            f_w = randint(120,400)
+            f_x = randint(30,WIN_WIDTH-f_w-30) 
+            floor = Floor(f_x, floor_group[-1].rect.y - 100, f_w)
+            floor_group.append(floor)
+            player.highest_floor_index -= 1
+            player.current_floor_index -= 1
+            player.old_floor_index -= 1
+                
+        if floor.rectsolid.colliderect(player.rect):
+            if player.rect.bottom < floor.rectsolid.centery:
+                if player.y_vel> 0:
+                    player.landed()
+                    player.rect.bottom = floor.rectsolid.top
+                    player.y_vel = 0
+                    player.current_floor_index = floor_group.index(floor)
+                    if player.current_floor_index > player.old_floor_index :
+                        player.score += 10
+                        if player.bonus_y == 4:
+                            player.score+=5
+                        elif player.bonus_y == 8:
+                            player.score += 15
+                        player.old_floor_index = player.current_floor_index
+                    if player.highest_floor_index < player.current_floor_index :
+                        player.highest_floor_index = player.current_floor_index
+            if (player.rect.top < 100) and not PLAYER_THIRDWAY and FLOOR_VELOCITY==0 :
+                FLOOR_VELOCITY += 1
+                PLAYER_THIRDWAY= True
+            if player.rect.right >= floor.rectsolid.right and player.x_vel!= 0 :
+                player.bonus_y = 4
+                if abs(floor.rectsolid.centerx - floor_group[floor_group.index(floor)+1].rectsolid.centerx) > 300:
+                    player.bonus_y += 4
+            elif player.rect.left <= floor.rectsolid.left and player.x_vel != 0 :
+                player.bonus_y = 4
+                if abs(floor.rectsolid.centerx - floor_group[floor_group.index(floor)+1].rectsolid.centerx) > 300:
+                    player.bonus_y += 4
+            else:
+                player.bonus_y = 0
     
     
+                
+    
+    screen.blit(bg, (0,0))
+    draw_floor(floor_group)
+    for wall in wallgrp:
+        wall.draw(screen)
+    player.draw(screen)
+
+def get_high_score() :
+    fr = open("db/score.txt", "r")
+    highscore = fr.readline()
+    return int(highscore)
+
+def update_score(score):
+    f = open("db/score.txt", "r")
+    old = f.readline()
+    f.close()
+    if score > int(old):
+        fw = open("db/score.txt", "w")
+        fw.write(str(score))
+
+def gameover():
+    global GAME_ACTIVE,menu
+    gameover = pygame.image.load(os.path.join("sprites","gameover.png"))
+    gameover = pygame.transform.scale(gameover,(WIN_WIDTH,WIN_HEIGHT))
+    screen.blit(gameover,(0,0))
+    print_text(f"Score: {player.score}",TEXT_FONT,screen,(WIN_WIDTH//2 - 100,25))
+    print_text(f"High Score: {get_high_score()}",TEXT_FONT,screen,(WIN_WIDTH//2 + 100,25))
+    print_text("Press Space to Play Again",TEXT_FONT,screen,(WIN_WIDTH//2,450))
+    print_text("Press Esc for Main Menu",TEXT_FONT,screen,(WIN_WIDTH//2,500))
+    for event in pygame.event.get()  :
+            if event.type == pygame.QUIT or (menu["Exit"]):
+                pygame.quit()
+                exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    menu = welcome(screen)
+                    GAME_ACTIVE = menu["PlayGame"] 
+                if event.key == pygame.K_SPACE:
+                    tryagain.play()
+                    GAME_ACTIVE = True
+
+
+screen = pygame.display.set_mode((WIN_WIDTH,WIN_HEIGHT)) 
+# screen.fill('White')
+
+
+
+pygame.display.set_caption("Icy Tower")
+
+
+
+game_icon = pygame.image.load(os.path.join("icons","icytowericon.png"))
+pygame.display.set_icon(game_icon)
+
+
+
+clock = pygame.time.Clock()
+
+
+
+background_surf = pygame.image.load(os.path.join("sprites",'background.jpg')).convert()
+
+
+
+
+wallGroup = pygame.sprite.Group()
+for i in range(3):
+    wallR = Wall(804,i*240,"right")
+    wallL = Wall(45,i*240,"left")
+    wallGroup.add(wallR)
+    wallGroup.add(wallL)
+
+
+
+
+floor_surf = pygame.image.load(os.path.join('sprites','icy2.png')).convert()                 
+floor_rect = floor_surf.get_rect(topleft = (0,WIN_HEIGHT-floor_surf.get_height()))
+
+
+
+
+bottom_floor = Floor(0,WIN_HEIGHT-50,WIN_WIDTH)
+floor_group.append(bottom_floor)
+for i in range(MAX_FLOORS):
+    f_w = randint(120,400)
+    f_x = randint(30,WIN_WIDTH-f_w-30) 
+    
+    floor = Floor(f_x, floor_yy, f_w)
+    
+    floor_group.append(floor)
+    floor_yy -= 100
+
+floor_rect_list = []
+
+gameBG = mixer.music.load(music_dict["gameBG"]) 
+gameo = mixer.Sound(music_dict["gameover"])
+tryagain = mixer.Sound(music_dict["tryagain"])
+mixer.music.play(-1)
+mixer.music.set_volume(1)
+
+
+
+player = Player(WIN_WIDTH//2,WIN_HEIGHT - floor_surf.get_height() - PLAYER_Y )
 
 
 menu = welcome(screen)
 GAME_ACTIVE = menu["PlayGame"]
-# Gameloop
+START_TIME = pygame.time.get_ticks()//1000
+
+
 while True :
-    collide_left = False
-    collide_right = False
-    scroll = 100
-    offset_y = 0
-    keys = pygame.key.get_pressed()
-    if keys[pygame.K_LEFT]:
-        # Checking collision with left wall so that player can't go out of screen
-        if player_rect.left < wallList[3].right:
-            collide_left = True
-            # print("collided with left wall")
-        else:
-            player_rect.x-=5
-    if keys[pygame.K_RIGHT]:
-        # Checking collision with right wall so that player can't go out of screen
-        if player_rect.right > wallList[0].left:
-            collide_right = True
-            # print("collided with right wall")
-        else:
-            player_rect.x+=5
-    # Events loop
+    # collide_left = False
+    # collide_right = False
     for event in pygame.event.get()  :
         if event.type == pygame.QUIT or (menu["Exit"]):
             pygame.quit()
             exit()
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE:
-                # keys = pygame.key.get_pressed()
-                if player_rect.bottom <= WIN_HEIGHT+50 and jump_counter == 0 :     
-                    PLAYER_GRAVITY = -13
-                    jump_counter += 1
-            keys = pygame.key.get_pressed()                    
-            if (keys[pygame.K_SPACE]) and player_rect.bottom <= WIN_HEIGHT+50 and jump_counter == 1 and (collide_left or collide_right) and PLAYER_GRAVITY!= 0 :     
-                PLAYER_GRAVITY = -15
-                collide_right = False
-                collide_left = False
-                # player_rect.x += 100
-                jump_counter += 1
-    
-
-    # Drawing Random Floors
-         
-    # if len(floor_rect_list) <100:
-    #     start = 60
-    #     end = WIN_WIDTH - 100
-    #     rand_start = randint(start,end)
-    #     rand_end = randint(rand_start,end)
-    #     if (rand_end - rand_start) > 50 and (rand_end - rand_start) < 300 :
-    #         if len(floor_rect_list) > 0 :
-    #             if (floor_rect_list[-1][2] - rand_start)<100:
-    #                 temp = [floor_surf.get_rect(topleft = (rand_start,floor_y)),rand_start,rand_end]
-    #                 floor_rect_list.append(temp)
-    #                 floor_y -= 100
-    #         else:
-    #             temp = [floor_surf.get_rect(topleft = (rand_start,floor_y)),rand_start,rand_end]
-    #             floor_rect_list.append(temp)
-    #             floor_y -= 100
-    
-
-    # User Input Handling
-    
-    # if keys[pygame.K_UP] or keys[pygame.K_SPACE]:
-    #     if player_rect.bottom <= WIN_HEIGHT+50 and jump_counter == 0 :     
-    #         PLAYER_GRAVITY = -13
-    #         jump_counter += 1
-    #     elif player_rect.bottom <= WIN_HEIGHT+50 and jump_counter == 1 and (collide_left or collide_right) and PLAYER_GRAVITY!= 0 :     
-    #         PLAYER_GRAVITY += -15
-    #         collide_right = False
-    #         collide_left = False
-    #         # player_rect.x += 100
-    #         jump_counter += 1
-        
-
-
-    if GAME_ACTIVE:
-        # Background
-        screen.blit(background_surf,(0,0))
-
-        # Bottom Floor
-        draw_floor(floor_surf,floor_rect,0,WIN_WIDTH)
-
-        # Random Floors
-        floor_sprite(floor_group)
-        
-        # Walls
-        for i in range(len(wallList)):
-            if i<3:
-                place_surface(RWall_surf,wallList[i])
-            else:
-                place_surface(LWall_surf,wallList[i])
-
-        # Player Movements and Logic
-        PLAYER_GRAVITY += 0.7
-        player_rect.y += (PLAYER_GRAVITY+offset_y)  
-        if (player_rect.bottom >= WIN_HEIGHT-floor_surf.get_height()) and not PLAYER_THIRDWAY:
-            player_rect.bottom = WIN_HEIGHT-floor_surf.get_height()
-            PLAYER_GRAVITY = 0
-            jump_counter = 0
-        current_time = pygame.time.get_ticks()//1000
-        # print(current_time)
-        if current_time == 30 and not FLOOR_TIMER:
-            FLOOR_TIMER += 1
-            # current_time = 0
-        # print(FLOOR_TIMER)
-        # Collision mechanics 
-        for floor in floor_group:
-            if floor.rectsolid.colliderect(player_rect):
-                if player_rect.bottom < floor.rectsolid.centery:
-                    if PLAYER_GRAVITY > 0:
-                        player_rect.bottom = floor.rectsolid.top
-                        PLAYER_GRAVITY = 0
-                        jump_counter = 0
-        if player_rect.bottom < WIN_HEIGHT*(1/3):
-            PLAYER_THIRDWAY = True
-        if PLAYER_THIRDWAY and player_rect.top > 100:
-            FLOOR_VELOCITY = 1
-        elif (player_rect.top < scroll):
-            player_rect.top = scroll
-            offset_y = -PLAYER_GRAVITY
-            FLOOR_VELOCITY = -(PLAYER_GRAVITY)
-
-             
-        # else:
-        #     FLOOR_VELOCITY  = 2
-        # print(pygame.sprite.Sprite.groups(Floor()))
-        for floor in floor_group: 
-            floor.rect. y += FLOOR_VELOCITY
-            floor.rectsolid.y += FLOOR_VELOCITY
-            # floor_yy += FLOOR_VELOCITY
+            if ((event.key == pygame.K_SPACE)or (event.key == pygame.K_UP)) and player.jump_count < 1:
+                player.current_floor = player.rect.bottom
+                player.jump()
             
-            # if floor.rect.top > (WIN_HEIGHT + 100):
-            #     floor_group.remove(floor)
-            #     floor_group.add(Floor(randint(30,WIN_WIDTH-f_w-30), floor_yy, randint(120,400)))
-            #     floor_yy -= 100
+            
                 
+    if GAME_ACTIVE:    
+        draw(background_surf,floor_group,wallGroup,player)
+        current_time = pygame.time.get_ticks()//1000 - START_TIME
+        if current_time % 30 == 0 and current_time!=0 and FLOOR_VELOCITY<4:
+            FLOOR_VELOCITY += 1
+            START_TIME += current_time
+        player.loop(60)
+        handle_move(player,wallGroup)
+        print_text(f"Score: {player.score}",TEXT_FONT,screen,(140,10))
+
+        if player.rect.top > WIN_HEIGHT :
+            # screen.fill("Black")
+            GAME_ACTIVE = False
+            gameo.play()
+            update_score(player.score)
+    else:
+        gameover()
         
 
-        # Player Rendering
-        screen.blit(player_surf,player_rect)
-        if player_rect.top > WIN_HEIGHT :
-            screen.fill("Black")
-            mixer.Channel(0).set_volume(0)
-            # mixer.Channel(1).set_volume(1)
-    
 
-        # # random floor
-        # if len(floor_rect_list)> 0:
-        #     for i in range(len(floor_rect_list)):
-        #         draw_floor(floor_rect_list[i][0],floor_rect_list[i][1], floor_rect_list[i][1]+450)
         
+        if GAME_ACTIVE:
+            reset()
+            # player.rect.bottom = WIN_HEIGHT - floor_surf.get_height() - PLAYER_Y
+            # player.rect.centerx = WIN_WIDTH//2
+            
+            
+            # for floor in floor_group:
+            #     floor.rectsolid.bottom = floor_y
+            #     floor_y -= 100
+            mixer.Channel(0).set_volume(0.05)
+            
 
-    
     pygame.display.update() 
     clock.tick(60) 
